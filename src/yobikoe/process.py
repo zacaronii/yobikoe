@@ -109,8 +109,8 @@ class Warmer:
             self.done += 1
 
         with ThreadPoolExecutor(self.workers, thread_name_prefix="warm") as pool:
-            for _ in pool.map(one, rows):
-                pass
+            for start in range(0, len(rows), 256):          # feed the pool in batches: bounded memory
+                list(pool.map(one, rows[start:start + 256]))
         self.finished = True
         log.info("warmer: finished (%d processed, %d already cached, %d missing)", self.done, self.skipped, self.failed)
 
