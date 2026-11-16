@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "yobikoe"
+version = "0.1.0"
+description = "Self-hosted Japanese audio source for Yomitan: dictionary recordings plus pitch-accent text-to-speech"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+dependencies = ["fastapi>=0.115", "uvicorn[standard]>=0.30", "httpx>=0.27", "lameenc>=1.7"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

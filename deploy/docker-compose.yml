@@ -1,0 +1,27 @@
+# Example stack: yobikoe + a VOICEVOX engine for text-to-speech.
+# Put your audio pack at ${APPDATA}/yobikoe/audio.zip; the index is built there on first start.
+services:
+  yobikoe:
+    image: ghcr.io/zacaronii/yobikoe:latest
+    container_name: yobikoe
+    restart: unless-stopped
+    user: ${PUID}:${PGID}
+    environment:
+      TZ: ${TZ}
+      VOICEVOX_URL: http://voicevox:50021
+      VOICEVOX_SPEAKER: ${VOICEVOX_SPEAKER:-30}   # see /speakers on the engine; 30 = No.7 (アナウンス)
+      # YOBIKOE_API_KEY: ""                      # optional: require ?apiKey= on every request
+    volumes:
+      - ${APPDATA}/yobikoe:/data                 # audio.zip (your pack), yobikoe.db, tts-cache/
+    ports:
+      - "192.0.2.10:8080:8080"                   # replace with this host's LAN IP, or use a reverse proxy
+    networks: [default, voicevox]
+    depends_on: [voicevox]
+  voicevox:
+    image: voicevox/voicevox_engine:cpu-0.26.2
+    container_name: yobikoe-voicevox
+    restart: unless-stopped
+    networks: [voicevox]                         # reachable only by yobikoe; needs no internet
+networks:
+  voicevox:
+    internal: true
