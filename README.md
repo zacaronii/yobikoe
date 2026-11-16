@@ -1,4 +1,4 @@
-# yobikoe
+# <img src="art/kaeru.svg" alt="" width="54" height="42" align="absmiddle"> yobikoe
 
 **yobikoe** (呼び声, "a call") is a self-hosted Japanese audio source for [Yomitan](https://github.com/yomidevs/yomitan).
 It serves pronunciation recordings from the "Yomitan Ultimate Audio" pack. When a word has no recording, it falls back
