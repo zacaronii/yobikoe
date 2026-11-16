@@ -14,3 +14,4 @@ __pycache__/
 samples/*.html
 samples/tts-cache/
 .stack/
+PLAN.md

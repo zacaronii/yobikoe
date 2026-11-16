@@ -3,7 +3,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 WORKDIR /app
 COPY pyproject.toml LICENSE ./
 COPY src ./src
-RUN pip install --no-cache-dir . && rm -rf /root/.cache
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/* \
+    && pip install --no-cache-dir . && rm -rf /root/.cache
 USER 99:100
 VOLUME /data
 EXPOSE 8080

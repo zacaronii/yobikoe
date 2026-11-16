@@ -113,7 +113,7 @@ def test_api(pack, tmp_path):
     body = c.get("/audio/list", params={"term": "橋", "reading": "はし"}).json()
     assert body["type"] == "audioSourceList"
     names = [a["name"] for a in body["audioSources"]]
-    assert names[0] == "nhk16: ハシ＼ [2] (Expression+Reading)" and names[-2:] == ["TTS: ハシ'", "TTS: ハ'シ"]
+    assert names[0] == "nhk16: ハシ＼ [2] (Expression+Reading)" and names[-2:] == ["TTS (voice 13): ハシ'", "TTS (voice 13): ハ'シ"]
     first = c.get(body["audioSources"][0]["url"].replace("http://testserver", ""))
     assert first.content == b"NHK-HASHI" * 50 and first.headers["content-type"] == "audio/mpeg"
     jpod = next(a["url"] for a in body["audioSources"] if a["name"].startswith("jpod"))
@@ -131,3 +131,79 @@ def test_api_key_is_optional(pack):
     assert locked.get("/audio/list", params={"term": "橋"}).status_code == 401
     body = locked.get("/audio/list", params={"term": "橋", "apiKey": "k"}).json()
     assert all("apiKey=k" in a["url"] for a in body["audioSources"])
+
+
+def test_two_voices_in_order_and_only_enabled_ones(pack, tmp_path):
+    z, db = pack
+    calls = []
+    t = TTS("http://voicevox", 16, tmp_path / "cache")
+    t.client = httpx.Client(base_url="http://voicevox", transport=httpx.MockTransport(fake_engine(calls)))
+    c = TestClient(create_app(z, db, tts=t, speakers=[16, 52]))
+    tts = [a for a in c.get("/audio/list", params={"term": "橋", "reading": "はし"}).json()["audioSources"]
+           if a["name"].startswith("TTS")]
+    assert [a["name"] for a in tts] == ["TTS (voice 16): ハシ'", "TTS (voice 16): ハ'シ",
+                                        "TTS (voice 52): ハシ'", "TTS (voice 52): ハ'シ"]
+    assert "speaker=52" in tts[2]["url"]
+    assert c.get("/audio/tts", params={"term": "橋", "reading": "はし", "speaker": 3}).status_code == 404
+
+
+class FakeProcessor:
+    enabled = False
+    def __init__(self): self.seen = []
+    def get(self, key, data): self.seen.append(key); return b"LEVELLED:" + data[:5]
+
+
+def test_recordings_are_processed_unless_raw(pack):
+    z, db = pack
+    p = FakeProcessor()
+    c = TestClient(create_app(z, db, processor=p))
+    assert c.get("/audio/get/nhk16/audio/hashi.mp3").content == b"LEVELLED:NHK-H"
+    assert c.get("/audio/get/nhk16/audio/hashi.mp3", params={"raw": 1}).content == b"NHK-HASHI" * 50
+    assert p.seen == ["nhk16_files/audio/hashi.mp3"]
+
+
+def test_processor_falls_back_to_the_original(tmp_path):
+    from yobikoe.process import Processor
+    broken = Processor(tmp_path / "pc", ffmpeg="/bin/false")         # "ffmpeg" that always fails
+    assert broken.get("k", b"ORIGINAL") == b"ORIGINAL"
+    assert not broken.cache_dir.joinpath("x").exists()
+
+
+@pytest.mark.skipif(__import__("shutil").which("ffmpeg") is None, reason="needs ffmpeg")
+def test_processor_trims_and_levels_real_audio(tmp_path):
+    import subprocess
+    from yobikoe.process import Processor
+    # 0.5 s silence + 0.5 s quiet tone + 0.5 s silence, as mp3
+    src = subprocess.run(["ffmpeg", "-loglevel", "error", "-f", "lavfi", "-i",
+                          "aevalsrc='if(between(t,0.5,1),0.05*sin(2*PI*440*t),0)':d=1.5:s=24000",
+                          "-f", "mp3", "-"], capture_output=True, check=True).stdout
+    out = Processor(tmp_path / "pc").get("tone", src)
+    def duration_and_mean(b):
+        r = subprocess.run(["ffmpeg", "-hide_banner", "-i", "pipe:0", "-af", "volumedetect", "-f", "null", "-"],
+                           input=b, capture_output=True).stderr.decode()
+        import re
+        mean = float(re.search(r"mean_volume: (-?[\d.]+)", r).group(1))
+        t = re.findall(r"time=(\d+):(\d+):([\d.]+)", r)[-1]
+        return int(t[0]) * 3600 + int(t[1]) * 60 + float(t[2]), mean
+    (d0, m0), (d1, m1) = duration_and_mean(src), duration_and_mean(out)
+    assert d1 < d0 - 0.6                       # most of the leading/trailing silence is gone
+    assert abs(m1 - (-20)) < 3 and m1 > m0     # louder, close to the target level
+
+
+def test_warmer_processes_most_played_sources_first_and_resumes(pack, tmp_path):
+    from yobikoe.process import Processor, Warmer
+    z, db = pack
+    store.build(z, db)
+    s = store.AudioStore(z, db)
+
+    class Recording(Processor):
+        def __init__(self): super().__init__(tmp_path / "pc", ffmpeg="ffmpeg-stub"); self.order = []
+        def process(self, data): self.order.append(data[:4]); return b"P"
+
+    p = Recording()
+    w = Warmer(s, p, lookup.SOURCE_ORDER, workers=1)
+    w._run()
+    assert w.status()["processed"] == 4 and p.order[0][:3] == b"NHK" and p.order[-1] == b"FORV"
+    again = Warmer(s, p, lookup.SOURCE_ORDER, workers=1)
+    again._run()
+    assert again.status()["processed"] == 0 and again.status()["already_cached"] == 4

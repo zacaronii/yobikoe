@@ -1,0 +1,9 @@
+.git
+.github
+.venv
+.stack
+samples
+tests
+data
+*.zip
+*.db

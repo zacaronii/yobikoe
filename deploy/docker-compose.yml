@@ -9,10 +9,10 @@ services:
     environment:
       TZ: ${TZ}
       VOICEVOX_URL: http://voicevox:50021
-      VOICEVOX_SPEAKER: ${VOICEVOX_SPEAKER:-30}   # see /speakers on the engine; 30 = No.7 (アナウンス)
+      VOICEVOX_SPEAKERS: ${VOICEVOX_SPEAKERS:-16,52} # voices, first = default; ids from the engine's /speakers
       # YOBIKOE_API_KEY: ""                      # optional: require ?apiKey= on every request
     volumes:
-      - ${APPDATA}/yobikoe:/data                 # audio.zip (your pack), yobikoe.db, tts-cache/
+      - ${APPDATA}/yobikoe:/data                 # audio.zip (your pack), yobikoe.db, caches
     ports:
       - "192.0.2.10:8080:8080"                   # replace with this host's LAN IP, or use a reverse proxy
     networks: [default, voicevox]
