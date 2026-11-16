@@ -23,6 +23,13 @@ SCHEMA_VERSION = 1
 SQL_DUMP = "entry_and_pitch_db.sql"
 _LOCAL_HEADER = struct.Struct("<4s5H3I2H")       # zip local file header, 30 bytes
 _LOCAL_SIGNATURE = b"PK\x03\x04"
+# Columns yobikoe reads; a pack whose dump lacks them is a different format.
+REQUIRED_COLUMNS = {"entries": {"id", "expression", "reading", "source", "speaker", "display", "file"},
+                    "pitch_accents": {"id", "expression", "reading", "pitch", "count"}}
+
+
+class PackError(Exception):
+    """The audio pack is missing, unreadable or not the Yomitan Ultimate Audio pack."""
 
 
 def _pack_stamp(zip_path: Path) -> str:
@@ -46,6 +53,15 @@ def build(zip_path: Path, db_path: Path) -> None:
     """Import the pack's SQL dump and the zip's file locations into a fresh SQLite file, then swap it in."""
     tmp = db_path.with_suffix(".building")
     tmp.unlink(missing_ok=True)
+    try:
+        _build(zip_path, db_path, tmp)
+    except (zipfile.BadZipFile, KeyError, sqlite3.Error, UnicodeDecodeError) as e:
+        tmp.unlink(missing_ok=True)
+        raise PackError(f"{zip_path} is not the Yomitan Ultimate Audio pack ({e}). Use the pack's zip as downloaded, "
+                        f"not re-zipped or extracted; it contains {SQL_DUMP} and folders like nhk16_files/.") from e
+
+
+def _build(zip_path: Path, db_path: Path, tmp: Path) -> None:
     c = sqlite3.connect(tmp)
     c.execute("PRAGMA journal_mode=OFF")
     c.execute("PRAGMA synchronous=OFF")
@@ -54,6 +70,9 @@ def build(zip_path: Path, db_path: Path) -> None:
         with z.open(SQL_DUMP) as f:
             script = io.TextIOWrapper(f, encoding="utf-8").read()
         c.executescript("BEGIN;" + script + ";COMMIT;")
+        for table, cols in REQUIRED_COLUMNS.items():
+            if missing := cols - {r[1] for r in c.execute(f"PRAGMA table_info({table})")}:
+                raise KeyError(f"{SQL_DUMP} has no {table} columns {', '.join(sorted(missing))}")
         log.info("indexing %d zip members", len(z.infolist()))
         c.execute("CREATE TABLE files (name TEXT PRIMARY KEY, offset INTEGER NOT NULL, csize INTEGER NOT NULL,"
                   " size INTEGER NOT NULL, method INTEGER NOT NULL) WITHOUT ROWID")

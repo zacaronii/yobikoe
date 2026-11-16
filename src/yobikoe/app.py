@@ -130,10 +130,35 @@ def create_app(zip_path: Path, db_path: Path, api_key: str | None = None, tts: T
     return app
 
 
+def find_pack(data: Path) -> Path:
+    """`<data>/audio.zip`, or the only zip in `<data>` (e.g. still named yomitan_ultimate_audio_source.zip)."""
+    path = data / "audio.zip"
+    if path.exists():
+        return path
+    zips = sorted(data.glob("*.zip"))
+    if len(zips) == 1:
+        log.info("using %s as the audio pack", zips[0].name)
+        return zips[0]
+    found = f" Found {', '.join(z.name for z in zips)}: rename the pack to audio.zip." if zips else ""
+    raise store.PackError(f"No audio pack: put the Yomitan Ultimate Audio zip at {path}.{found}")
+
+
 def from_env() -> FastAPI:
-    """The container's app: paths and options from the environment."""
+    """The container's app: paths and options from the environment. Setup problems end it with one clear message."""
     logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"), format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    try:
+        return _from_env()
+    except store.PackError as e:
+        log.error("%s", e)
+        raise SystemExit(1) from None
+
+
+def _from_env() -> FastAPI:
     data = Path(os.environ.get("YOBIKOE_DATA", "/data"))
+    if not os.access(data, os.W_OK):
+        raise store.PackError(f"{data} isn't writable by this container (uid {os.getuid()}, gid {os.getgid()}): yobikoe "
+                              f"keeps its index and caches there. Give that folder to the user in `user:`, e.g. "
+                              f"chown -R {os.getuid()}:{os.getgid()} on the host folder.")
     engine = os.environ.get("VOICEVOX_URL", "").strip()
     # VOICEVOX_SPEAKERS: comma-separated speaker ids, first = default (VOICEVOX_SPEAKER kept for one voice).
     speakers = [int(s) for s in os.environ.get("VOICEVOX_SPEAKERS", os.environ.get("VOICEVOX_SPEAKER", "16")).split(",")
@@ -141,7 +166,10 @@ def from_env() -> FastAPI:
     tts = TTS(engine, speakers[0], data / "tts-cache") if engine else None
     normalize = os.environ.get("YOBIKOE_NORMALIZE", "true").lower() not in ("0", "false", "no")
     processor = Processor(data / "processed-cache") if normalize else None
-    return create_app(Path(os.environ.get("YOBIKOE_ZIP", str(data / "audio.zip"))),
+    zip_path = Path(os.environ["YOBIKOE_ZIP"]) if os.environ.get("YOBIKOE_ZIP") else find_pack(data)
+    if not zip_path.exists():
+        raise store.PackError(f"No audio pack at {zip_path} (YOBIKOE_ZIP).")
+    return create_app(zip_path,
                       Path(os.environ.get("YOBIKOE_DB", str(data / "yobikoe.db"))),
                       api_key=os.environ.get("YOBIKOE_API_KEY") or None, tts=tts, speakers=speakers, processor=processor,
                       public_url=os.environ.get("YOBIKOE_PUBLIC_URL") or None,

@@ -7,7 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from yobikoe import lookup, pitch, store
-from yobikoe.app import create_app
+from yobikoe.app import create_app, find_pack, from_env
 from yobikoe.tts import TTS
 
 SQL = """PRAGMA defer_foreign_keys=TRUE;
@@ -48,6 +48,44 @@ def test_build_reads_deflated_and_stored_files(pack):
     assert s.read("jpod_files/はし - 橋.mp3") == b"JPOD" * 50
     assert s.read("nhk16_files/nope.mp3") is None
 
+
+
+@pytest.mark.parametrize("contents", [
+    None,                                                                  # not a zip at all
+    {"nhk16_files/a.mp3": b"x"},                                           # no SQL dump
+    {"entry_and_pitch_db.sql": "CREATE TABLE entries (id INTEGER);"},     # a different dump format
+])
+def test_build_rejects_other_files_clearly(tmp_path, contents):
+    z = tmp_path / "audio.zip"
+    if contents is None:
+        z.write_text("not a zip")
+    else:
+        with zipfile.ZipFile(z, "w") as f:
+            for name, data in contents.items():
+                f.writestr(name, data)
+    with pytest.raises(store.PackError, match="not the Yomitan Ultimate Audio pack"):
+        store.build(z, tmp_path / "yobikoe.db")
+    assert not (tmp_path / "yobikoe.building").exists()
+
+
+def test_find_pack(tmp_path):
+    with pytest.raises(store.PackError, match="No audio pack"):
+        find_pack(tmp_path)
+    (tmp_path / "yomitan_ultimate_audio_source.zip").write_bytes(b"")
+    assert find_pack(tmp_path).name == "yomitan_ultimate_audio_source.zip"     # the only zip: used as is
+    (tmp_path / "other.zip").write_bytes(b"")
+    with pytest.raises(store.PackError, match="rename the pack to audio.zip"):
+        find_pack(tmp_path)
+    (tmp_path / "audio.zip").write_bytes(b"")
+    assert find_pack(tmp_path).name == "audio.zip"
+
+
+def test_setup_problems_exit_with_a_message(tmp_path, monkeypatch, caplog):
+    monkeypatch.setenv("YOBIKOE_DATA", str(tmp_path))
+    monkeypatch.delenv("VOICEVOX_URL", raising=False)
+    with pytest.raises(SystemExit):
+        from_env()
+    assert "No audio pack" in caplog.text
 
 def test_order_match_type_then_source(pack):
     z, db = pack
