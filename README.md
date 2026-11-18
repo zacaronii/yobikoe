@@ -26,6 +26,19 @@ The recordings and their index aren't part of this repository. yobikoe expects t
 
 Put the zip at `<data>/audio.zip`. On first start, yobikoe builds its index (`<data>/yobikoe.db`, about 340 MB) in
 roughly 10–20 seconds. If the zip ever changes, the index is rebuilt automatically.
+Use the zip exactly as downloaded: don't extract it or re-zip it. If it's the only zip in the folder, yobikoe finds it
+under any name (e.g. still `yomitan_ultimate_audio_source.zip`).
+
+## What to expect
+
+- **Disk:** about 11 GB in total: the pack (5.5 GB), the index (0.3 GB) and levelled copies of the recordings (about
+  5.2 GB). Set `YOBIKOE_NORMALIZE=false` to skip the levelled copies and serve the recordings as they are.
+- **Memory:** roughly 300–600 MB for yobikoe and 100–250 MB for VOICEVOX.
+- **First start:** the index takes 10–20 seconds to build. After that, yobikoe levels every recording in the background
+  at the lowest CPU priority. That takes several hours (about 7 on a home server with 2 workers), and yobikoe works
+  normally the whole time.
+- **Platforms:** the image is built for x86-64 (Intel/AMD) only. If you need ARM (Apple Silicon, Raspberry Pi), open an
+  issue.
 
 ## Run it
 
@@ -51,11 +64,16 @@ networks:
     internal: true                   # the engine needs no internet and only yobikoe talks to it
 ```
 
+On Linux, set `user:` to your own ids (`id -u` and `id -g`), and create `data/` yourself before starting so you own it.
+With Docker Desktop on Windows or Mac, leave it as is.
+
 Then, in Yomitan: **Settings → Audio → Configure audio playback sources → Custom URL (JSON)**:
 
 ```
 http://<host>:8080/audio/list?term={term}&reading={reading}
 ```
+
+`<host>` is `localhost` if Docker runs on the same computer as your browser, otherwise your server's LAN address.
 
 The server has no login. Keep it on your LAN or VPN, or set `YOBIKOE_API_KEY` and add `&apiKey=<key>` to that URL.
 
@@ -80,6 +98,14 @@ few minimal pairs (箸/端, 雨/飴...). Don't publish that page: it embeds reco
 
 VOICEVOX's terms ask you to credit the voice when you publish audio made with it (e.g. "VOICEVOX:九州そら"). Using it
 for your own study needs nothing.
+
+## Troubleshooting
+
+If the container stops right after starting, its log (`docker logs yobikoe`) ends with one line saying why: no pack
+found, a file that isn't the pack, or a data folder it can't write to.
+
+If Yomitan shows no yobikoe entries, open `http://<host>:8080/health` in the browser that runs Yomitan. If that doesn't
+load, the address or port is wrong, or something is blocking it.
 
 ## API
 
