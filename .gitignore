@@ -15,3 +15,5 @@ samples/*.html
 samples/tts-cache/
 .stack/
 PLAN.md
+LEVELLING-PLAN.md
+.levelling/
