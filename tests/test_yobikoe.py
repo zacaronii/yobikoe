@@ -201,10 +201,10 @@ def test_recordings_are_processed_unless_raw(pack):
 
 
 def test_processor_falls_back_to_the_original(tmp_path):
-    from yobikoe.process import Processor
-    broken = Processor(tmp_path / "pc", ffmpeg="/bin/false")         # "ffmpeg" that always fails
+    from yobikoe.process import LevelStore, Processor
+    broken = Processor(LevelStore(tmp_path / "levels.db"), ffmpeg="/bin/false")     # "ffmpeg" that always fails
     assert broken.get("k", b"ORIGINAL") == b"ORIGINAL"
-    assert not broken.cache_dir.joinpath("x").exists()
+    assert broken.levels.get("k") is None                                       # nothing stored: retried later
 
 
 @pytest.mark.skipif(__import__("shutil").which("ffmpeg") is None, reason="needs ffmpeg")
@@ -215,7 +215,8 @@ def test_processor_trims_and_levels_real_audio(tmp_path):
     src = subprocess.run(["ffmpeg", "-loglevel", "error", "-f", "lavfi", "-i",
                           "aevalsrc='if(between(t,0.5,1),0.05*sin(2*PI*440*t),0)':d=1.5:s=24000",
                           "-f", "mp3", "-"], capture_output=True, check=True).stdout
-    out = Processor(tmp_path / "pc").get("tone", src)
+    from yobikoe.process import LevelStore
+    out = Processor(LevelStore(tmp_path / "levels.db")).get("tone", src)
     def duration_and_mean(b):
         r = subprocess.run(["ffmpeg", "-hide_banner", "-i", "pipe:0", "-af", "volumedetect", "-f", "null", "-"],
                            input=b, capture_output=True).stderr.decode()
@@ -234,9 +235,11 @@ def test_warmer_processes_most_played_sources_first_and_resumes(pack, tmp_path):
     store.build(z, db)
     s = store.AudioStore(z, db)
 
+    from yobikoe.process import LevelStore, Levels
+
     class Recording(Processor):
-        def __init__(self): super().__init__(tmp_path / "pc", ffmpeg="ffmpeg-stub"); self.order = []
-        def process(self, data): self.order.append(data[:4]); return b"P"
+        def __init__(self): super().__init__(LevelStore(tmp_path / "levels.db"), ffmpeg="ffmpeg-stub"); self.order = []
+        def analyse(self, data): self.order.append(data[:4]); return Levels(steps=1)
 
     p = Recording()
     w = Warmer(s, p, lookup.SOURCE_ORDER, workers=1)

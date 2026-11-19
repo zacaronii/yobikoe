@@ -14,8 +14,11 @@ to keep open, and nothing to pay for.
 - **Text-to-speech that follows the pitch accent:** the pack includes pitch accent data (`ハ'シ`, `ハシ`). yobikoe tells
   VOICEVOX where the pitch drops, so 箸 and 端 sound different. Each variant is generated once (about 0.1 s) and cached.
 - **Even recordings:** clips are trimmed of leading/trailing silence and brought to the same loudness, so a quiet
-  Forvo recording doesn't follow a loud NHK one. A background job processes the whole pack at low priority, so first
-  plays don't wait. The pack itself is never modified, and `?raw=1` returns any recording untouched.
+  Forvo recording doesn't follow a loud NHK one. It's lossless: each clip is measured once, and only the result is
+  stored (how many mp3 frames to drop at each end and a volume change). Every play applies it to the original by
+  editing the mp3's frames directly (the mp3gain trick), in a few milliseconds, with no re-encoding and no second
+  copy of the pack. A background job measures the whole pack at low priority, so first plays don't wait. The pack
+  itself is never modified, and `?raw=1` returns any recording untouched.
 
 ## Audio pack (bring your own)
 
@@ -31,12 +34,12 @@ under any name (e.g. still `yomitan_ultimate_audio_source.zip`).
 
 ## What to expect
 
-- **Disk:** about 11 GB in total: the pack (5.5 GB), the index (0.3 GB) and levelled copies of the recordings (about
-  5.2 GB). Set `YOBIKOE_NORMALIZE=false` to skip the levelled copies and serve the recordings as they are.
+- **Disk:** about 6 GB in total: the pack (5.5 GB), the index (0.3 GB) and the levelling measurements (`levels.db`,
+  a few tens of MB). Set `YOBIKOE_NORMALIZE=false` to serve the recordings exactly as they are.
 - **Memory:** roughly 300–600 MB for yobikoe and 100–250 MB for VOICEVOX.
-- **First start:** the index takes 10–20 seconds to build. After that, yobikoe levels every recording in the background
-  at the lowest CPU priority. That takes several hours (about 7 on a home server with 2 workers), and yobikoe works
-  normally the whole time.
+- **First start:** the index takes 10–20 seconds to build. After that, yobikoe measures every recording in the
+  background at the lowest CPU priority. That takes a few hours on a home server with 2 workers, and yobikoe works
+  normally the whole time (a recording played before it's measured is measured on the spot, in about 50 ms).
 - **Platforms:** the image is built for x86-64 (Intel/AMD) only. If you need ARM (Apple Silicon, Raspberry Pi), open an
   issue.
 

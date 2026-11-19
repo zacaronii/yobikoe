@@ -32,7 +32,7 @@ class PackError(Exception):
     """The audio pack is missing, unreadable or not the Yomitan Ultimate Audio pack."""
 
 
-def _pack_stamp(zip_path: Path) -> str:
+def pack_stamp(zip_path: Path) -> str:
     st = zip_path.stat()
     return f"{SCHEMA_VERSION}:{st.st_size}:{int(st.st_mtime)}"
 
@@ -46,7 +46,7 @@ def is_current(db_path: Path, zip_path: Path) -> bool:
             row = c.execute("SELECT value FROM meta WHERE key='pack'").fetchone()
     except sqlite3.Error:
         return False
-    return bool(row) and row[0] == _pack_stamp(zip_path)
+    return bool(row) and row[0] == pack_stamp(zip_path)
 
 
 def build(zip_path: Path, db_path: Path) -> None:
@@ -80,7 +80,7 @@ def _build(zip_path: Path, db_path: Path, tmp: Path) -> None:
                       ((i.filename, i.header_offset, i.compress_size, i.file_size, i.compress_type)
                        for i in z.infolist() if not i.is_dir() and i.filename.lower().endswith(".mp3")))
     c.execute("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT)")
-    c.execute("INSERT INTO meta VALUES ('pack', ?)", (_pack_stamp(zip_path),))
+    c.execute("INSERT INTO meta VALUES ('pack', ?)", (pack_stamp(zip_path),))
     c.commit()
     c.execute("ANALYZE")
     c.close()

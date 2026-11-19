@@ -18,7 +18,7 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, Response
 
 from . import lookup, store
-from .process import Processor, Warmer
+from .process import LevelStore, Processor, Warmer
 from .tts import TTS
 
 log = logging.getLogger("yobikoe")
@@ -69,7 +69,7 @@ def create_app(zip_path: Path, db_path: Path, api_key: str | None = None, tts: T
 
     warmer = None
     if processor is not None and processor.enabled and warm_workers > 0:
-        nice = Processor(processor.cache_dir, ffmpeg=processor.ffmpeg, nice=True)
+        nice = Processor(processor.levels, ffmpeg=processor.ffmpeg, nice=True)
         warmer = Warmer(audio, nice, lookup.SOURCE_ORDER, warm_workers)
         warmer.start()
 
@@ -165,10 +165,10 @@ def _from_env() -> FastAPI:
                 if s.strip()]
     tts = TTS(engine, speakers[0], data / "tts-cache") if engine else None
     normalize = os.environ.get("YOBIKOE_NORMALIZE", "true").lower() not in ("0", "false", "no")
-    processor = Processor(data / "processed-cache") if normalize else None
     zip_path = Path(os.environ["YOBIKOE_ZIP"]) if os.environ.get("YOBIKOE_ZIP") else find_pack(data)
     if not zip_path.exists():
         raise store.PackError(f"No audio pack at {zip_path} (YOBIKOE_ZIP).")
+    processor = Processor(LevelStore(data / "levels.db", store.pack_stamp(zip_path))) if normalize else None
     return create_app(zip_path,
                       Path(os.environ.get("YOBIKOE_DB", str(data / "yobikoe.db"))),
                       api_key=os.environ.get("YOBIKOE_API_KEY") or None, tts=tts, speakers=speakers, processor=processor,
