@@ -38,7 +38,7 @@ under any name (e.g. still `yomitan_ultimate_audio_source.zip`).
   a few tens of MB). Set `YOBIKOE_NORMALIZE=false` to serve the recordings exactly as they are.
 - **Memory:** roughly 300–600 MB for yobikoe and 100–250 MB for VOICEVOX.
 - **First start:** the index takes 10–20 seconds to build. After that, yobikoe measures every recording in the
-  background at the lowest CPU priority. That takes a few hours on a home server with 2 workers, and yobikoe works
+  background at the lowest CPU priority. That takes about 5 hours on a home server with 2 workers, and yobikoe works
   normally the whole time (a recording played before it's measured is measured on the spot, in about 50 ms).
 - **Platforms:** the image is built for x86-64 (Intel/AMD) only. If you need ARM (Apple Silicon, Raspberry Pi), open an
   issue.
